@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/eskelinenantti/zipln/internal/multiplexer"
@@ -24,7 +25,7 @@ var rootCmd = &cobra.Command{
 	Long: `zipln creates or switches to herdr workspaces based on files and folders.
 
 Pick a location from the fuzzy finder. A herdr workspace will be created
-(or reused) for that location automatically. tmux sessions are also supported.
+(or reused) for that location automatically. tmux and Rex sessions are also supported.
 
 When a file is selected or passed as an argument, zipln opens it in
 $EDITOR and creates the workspace for the repository root, or the file's
@@ -98,7 +99,12 @@ func Run(args []string, muxFlag string, runner runner.Runner, path path.ShellPat
 
 	var command []string
 	if !isDir {
-		command = append(editorCmd, target)
+		// The editor starts in the project root, which may differ from our cwd.
+		file, err := filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		command = append(editorCmd, file)
 	}
 
 	return mux.Open(proj, command)
@@ -163,5 +169,5 @@ func editorCmd(path path.ShellPath) ([]string, error) {
 }
 
 func init() {
-	rootCmd.Flags().String("mux", "auto", "Terminal host override")
+	rootCmd.Flags().String("mux", "auto", "Terminal host override (auto, tmux, herdr, rex)")
 }

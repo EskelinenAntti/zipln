@@ -57,3 +57,23 @@ zipln also supports tmux sessions. Install `zipln` with `go install github.com/e
 ```tmux
 bind-key o "run 'zipln --mux tmux'"
 ```
+
+### Rex
+
+Install `zipln` with `go install github.com/eskelinenantti/zipln/zipln@latest`
+and run it from a [Rex](https://www.superlogical.com/rex) terminal:
+
+```bash
+zipln                # fuzzy find a file or folder
+zipln path/to/folder
+zipln path/to/file
+```
+
+zipln detects Rex through `REX_SESSION`. It creates or reuses a session named
+after the project folder with a path-based suffix, then selects it in the Rex
+app. Each file opens in `$EDITOR` in a new tab. Keep the Rex app connected;
+if several apps are connected, set `REX_CLIENT` to the intended client ID or label.
+The `rex` CLI must be on `$PATH`.
+
+Use `--mux rex` to select Rex explicitly. Automatic detection prefers herdr,
+then Rex, then tmux; outside these hosts, it defaults to tmux.

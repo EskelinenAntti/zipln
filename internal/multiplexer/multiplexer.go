@@ -8,6 +8,7 @@ import (
 	"github.com/eskelinenantti/zipln/internal/shell"
 	"github.com/eskelinenantti/zipln/internal/shell/herdr"
 	"github.com/eskelinenantti/zipln/internal/shell/path"
+	"github.com/eskelinenantti/zipln/internal/shell/rex"
 	"github.com/eskelinenantti/zipln/internal/shell/runner"
 	"github.com/eskelinenantti/zipln/internal/shell/tmux"
 )
@@ -21,6 +22,8 @@ func Select(name string, path path.ShellPath, runner runner.Runner) (Multiplexer
 		switch {
 		case os.Getenv("HERDR_ENV") == "1":
 			name = "herdr"
+		case os.Getenv("REX_SESSION") != "":
+			name = "rex"
 		case os.Getenv("TMUX") != "":
 			name = "tmux"
 		default:
@@ -33,8 +36,10 @@ func Select(name string, path path.ShellPath, runner runner.Runner) (Multiplexer
 		mux = tmux.Cmd{Runner: runner}
 	case "herdr":
 		mux = herdr.Cmd{Runner: runner}
+	case "rex":
+		mux = rex.Cmd{Runner: runner}
 	default:
-		return nil, fmt.Errorf("unknown multiplexer %q (use auto, tmux, or herdr)", name)
+		return nil, fmt.Errorf("unknown multiplexer %q (use auto, tmux, herdr, or rex)", name)
 	}
 	if !path.Contains(name) {
 		return nil, shell.NotInstalledError{Cmd: name}

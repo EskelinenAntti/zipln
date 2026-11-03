@@ -190,6 +190,7 @@ func createFile(t *testing.T, dir, name string) string {
 
 func TestSelectFolderFromPrompt(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	tests := []struct {
 		name     string
 		attached bool
@@ -243,6 +244,7 @@ func TestSelectFolderFromPrompt(t *testing.T) {
 
 func TestFolderSessionWorkflow(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	tests := []struct {
 		name          string
 		attached      bool
@@ -298,6 +300,7 @@ func TestFolderSessionWorkflow(t *testing.T) {
 
 func TestTmuxNotInstalled(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	unsetenv(t, "TMUX")
 	t.Setenv("EDITOR", editor)
 
@@ -319,6 +322,7 @@ func TestTmuxNotInstalled(t *testing.T) {
 
 func TestEditorSessionWorkflow(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	tests := []struct {
 		name          string
 		attached      bool
@@ -378,6 +382,7 @@ func TestEditorSessionWorkflow(t *testing.T) {
 
 func TestRelativePathToFile(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	unsetenv(t, "TMUX")
 	t.Setenv("EDITOR", editor)
 
@@ -402,7 +407,7 @@ func TestRelativePathToFile(t *testing.T) {
 	expectedCalls := [][]string{
 		{"git", "-C", ".", "rev-parse", "--show-toplevel"},
 		{"tmux", "has-session", "-t", session + ":"},
-		{"tmux", "new-session", "-c", dir, "-d", "-s", session, editor, fileName},
+		{"tmux", "new-session", "-c", dir, "-d", "-s", session, editor, filepath.Join(dir, fileName)},
 		{"tmux", "attach", "-t", session + ":"},
 	}
 
@@ -411,6 +416,7 @@ func TestRelativePathToFile(t *testing.T) {
 
 func TestFileDoesNotExist(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	unsetenv(t, "TMUX")
 	t.Setenv("EDITOR", editor)
 
@@ -430,6 +436,7 @@ func TestFileDoesNotExist(t *testing.T) {
 
 func TestFileInRepository(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	unsetenv(t, "TMUX")
 	t.Setenv("EDITOR", editor)
 
@@ -460,6 +467,7 @@ func TestFileInRepository(t *testing.T) {
 
 func TestEditorNotSet(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	unsetenv(t, "EDITOR")
 	unsetenv(t, "TMUX")
 
@@ -477,6 +485,7 @@ func TestEditorNotSet(t *testing.T) {
 
 func TestEditorNotInstalled(t *testing.T) {
 	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "")
 	t.Setenv("EDITOR", editor)
 	unsetenv(t, "TMUX")
 
@@ -539,8 +548,55 @@ func TestHerdrRelativeFileInRepository(t *testing.T) {
 		{"git", "-C", "sub", "rev-parse", "--show-toplevel"},
 		{"herdr", "workspace", "list"},
 		{"herdr", "workspace", "create", "--cwd", dir, "--label", filepath.Base(dir), "--no-focus"},
-		{"herdr", "pane", "run", "w1:p1", "'editor' '-R' 'sub/file.txt'"},
+		{"herdr", "pane", "run", "w1:p1", "'editor' '-R' '" + filepath.Join(dir, "sub/file.txt") + "'"},
 		{"herdr", "tab", "focus", "w1:t1"},
 		{"herdr", "workspace", "focus", "w1"},
+	}, runner.Calls)
+}
+
+func TestRexFolderFromPrompt(t *testing.T) {
+	t.Setenv("HERDR_ENV", "")
+	t.Setenv("REX_SESSION", "session:outer")
+	t.Setenv("EDITOR", editor)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, "project")
+	requireNoError(t, os.Mkdir(dir, 0755))
+	runner := &spy.SpyRunner{Responses: []spy.Response{
+		{}, {}, {OnRun: mock.WriteToStdout("project")},
+		{OnRun: mock.WriteToStdout(`{"sessions":[]}`)},
+		{OnRun: mock.WriteToStdout(`{"session_id":"session:1"}`)},
+		{},
+	}}
+	requireNoError(t, Run(nil, "auto", runner, mock.Path{Missing: []string{"tmux", "herdr"}}))
+	requireCalls(t, [][]string{
+		{"fd", "--max-depth", "2", "--follow", "--hidden", "--exclude", "{.git,node_modules,Library}", ".", "--base-directory", home},
+		{"fd", "--min-depth", "3", "--follow", "--hidden", "--exclude", "{.git,node_modules,Library}", ".", "--base-directory", home},
+		{"fzf", "--reverse", "--height", "70%", "--tmux", "70%", "--no-sort"},
+		{"rex", "ls", "--json"},
+		{"rex", "new", project.Name(dir), "--cwd", dir, "--json"},
+		{"rex", "do", "session.select", "session_id=session:1"},
+	}, runner.Calls)
+}
+
+func TestRexRelativeFileInRepository(t *testing.T) {
+	t.Setenv("HERDR_ENV", "1") // Explicit Rex overrides the detected host.
+	t.Setenv("EDITOR", "editor -R")
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "sub")
+	requireNoError(t, os.Mkdir(subdir, 0755))
+	file := createFile(t, subdir, "a'b.txt")
+	t.Chdir(subdir)
+	runner := &spy.SpyRunner{Responses: []spy.Response{
+		{OnRun: mock.WriteToStdout(dir)},
+		{OnRun: mock.WriteToStdout(`{"sessions":[{"session_id":"session:1","label":"` + project.Name(dir) + `"}]}`)},
+		{}, {},
+	}}
+	requireNoError(t, Run([]string{"a'b.txt"}, "rex", runner, mock.Path{Missing: []string{"tmux", "herdr"}}))
+	requireCalls(t, [][]string{
+		{"git", "-C", ".", "rev-parse", "--show-toplevel"},
+		{"rex", "ls", "--json"},
+		{"rex", "run", "--session", "session:1", "--cwd", dir, "--", "editor", "-R", file},
+		{"rex", "do", "session.select", "session_id=session:1"},
 	}, runner.Calls)
 }
